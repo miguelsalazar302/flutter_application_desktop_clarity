@@ -15,8 +15,8 @@ class _AcrylicPageState extends State<AcrylicPage> {
 
   @override
   void initState() {
-    super.initState();
     setWindowEffect(effect, color);
+    super.initState();
   }
 
   void _incrementCounter() {
@@ -26,6 +26,16 @@ class _AcrylicPageState extends State<AcrylicPage> {
   }
 
   void setWindowEffect(WindowEffect effect, Color color) {
+    if (effect == WindowEffect.transparent) {
+      Window.setWindowBackgroundColorToClear();
+      Window.addEmptyMaskImage();
+      Window.disableShadow();
+    } else {
+      Window.setWindowBackgroundColorToDefaultColor();
+      Window.removeMaskImage();
+      Window.enableShadow();
+    }
+
     Window.setEffect(effect: effect, color: color);
     setState(() {
       this.effect = effect;
@@ -36,7 +46,9 @@ class _AcrylicPageState extends State<AcrylicPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: effect == WindowEffect.transparent
+          ? Colors.transparent
+          : Colors.white,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text('Flutter Demo Home Page'),
