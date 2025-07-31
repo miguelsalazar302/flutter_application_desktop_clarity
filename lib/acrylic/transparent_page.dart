@@ -1,4 +1,4 @@
-import 'dart:math' as Math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/window.dart';
@@ -80,11 +80,13 @@ class _TransparentPageState extends State<TransparentPage>
       Window.makeTitlebarTransparent();
       Window.addEmptyMaskImage();
       Window.disableShadow();
+      Window.hideTitle();
     } else {
       Window.setWindowBackgroundColorToDefaultColor();
       Window.makeTitlebarOpaque();
       Window.removeMaskImage();
       Window.enableShadow();
+      Window.showTitle();
     }
 
     Window.setEffect(effect: effect, color: color);
