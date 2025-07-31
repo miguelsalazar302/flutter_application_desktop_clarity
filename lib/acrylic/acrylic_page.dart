@@ -1,3 +1,4 @@
+import 'package:application_desktop_ble/acrylic/transparent_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/window.dart';
 import 'package:flutter_acrylic/window_effect.dart';
@@ -95,6 +96,22 @@ class _AcrylicPageState extends State<AcrylicPage> {
                         : null,
                   ),
                   child: Text('Transparent'),
+                ),
+                SizedBox(width: 20),
+                ElevatedButton(
+                  onPressed: () async {
+                    // Ir a pantalla de conexión
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => TransparentPage()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: effect == WindowEffect.transparent
+                        ? Colors.blue[200]
+                        : null,
+                  ),
+                  child: Text('Go Transparent'),
                 ),
               ],
             ),
