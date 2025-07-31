@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = application_desktop_ble
+PRODUCT_NAME = Demo desktop
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.applicationDesktopBle
+PRODUCT_BUNDLE_IDENTIFIER = com.deepseadev.desktop
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2025 com.deepseadev. All rights reserved.
