@@ -11,4 +11,4 @@ PRODUCT_NAME = Demo desktop
 PRODUCT_BUNDLE_IDENTIFIER = com.deepseadev.desktop
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.deepseadev. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2025 Deepseadev. All rights reserved.

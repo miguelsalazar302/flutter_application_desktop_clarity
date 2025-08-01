@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "application_desktop_ble" "\0"
+            VALUE "CompanyName", "Deepseadev" "\0"
+            VALUE "FileDescription", "Demo desktop - Deepseadev" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "application_desktop_ble" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
+            VALUE "InternalName", "Demo desktop" "\0"
+            VALUE "LegalCopyright", "Copyright © 2025 Deepseadev. All rights reserved." "\0"
             VALUE "OriginalFilename", "application_desktop_ble.exe" "\0"
-            VALUE "ProductName", "application_desktop_ble" "\0"
+            VALUE "ProductName", "Demo desktop" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
