@@ -9,7 +9,8 @@
 #define MyAppURL  "https://www.deepseadev.com/en/"
 #define MyAppExeName  "application_desktop_ble.exe"
 #define SourceFileDir  "C:\wamp64\www\flutter\application_desktop_ble"
-
+#define MyCertFile     "{#SourceFileDir}\certificado.pfx"
+#define MyCertPassword "deepsea"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.

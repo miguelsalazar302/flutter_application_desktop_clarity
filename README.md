@@ -12,9 +12,14 @@ y con la configuracion para subir a las tiendas en AppStore para MAC
 flutter build windows --release
 ```
 
-## PC Miguel Compilar windows paquetado
+### 2. Crear el empaquetado
 ```bash
 C:\"Program Files (x86)"\"Inno Setup 6"\ISCC .\installer-config.iss
+```
+
+### 3. Firmar el empaquetado
+```bash
+signtool sign /f "C:\wamp64\www\flutter\application_desktop_ble\certificado.pfx" /p deepsea /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "C:\wamp64\www\flutter\application_desktop_ble\Output\Demo desktop-v1.0.1Installer-64.exe"
 ```
 
 ## 🛠️ Archivos modificados
@@ -63,3 +68,25 @@ El instalador se genera usando el script installer-config.iss, el cual está pre
 Se configuró el ícono y la visualización correcta en Agregar o quitar programas de Windows.
 
 Al desinstalar se eliminan automáticamente la carpeta de instalación y los accesos directos creados (escritorio y menú inicio).
+
+## Comandos para crear el certificado para windows
+### 1. Generar una clave privada.
+```bash
+openssl genrsa -out DemoDesktopKey.key 2048
+```
+
+### 2. Generar un archivo CSR con la ayuda de la clave privada.
+```bash
+openssl req -new -key DemoDesktopKey.key -out DemoDesktopCsr.csr
+```
+clave:deepsea
+
+### 3.  Genere un archivo CRT con la ayuda de la clave privada y el archivo CSR.
+```bash
+openssl x509 -in DemoDesktopCsr.csr -out DemoDesktopCsr.crt -req -signkey DemoDesktopKey.key -days 365
+```
+
+### 4. Genere el archivo .pfx (finalmente) con la ayuda de la clave privada y el archivo CRT.
+```bash
+openssl pkcs12 -export -out CERTIFICADO.pfx -inkey DemoDesktopKey.key -in DemoDesktopCsr.crt
+```
