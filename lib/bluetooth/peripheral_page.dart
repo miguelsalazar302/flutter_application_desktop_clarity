@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
 
@@ -15,35 +15,31 @@ class _PeripheralPageState extends State<PeripheralPage> {
   final CentralManager _manager = CentralManager();
   bool _connected = false;
 
-  double _intensidad = 0.5; // rango 0-1
-  double _frecuencia = 0.5; // rango 0-1
-
-  // UUIDs reales del ejemplo JS
+  // UUIDs
   final UUID serviceUUID = UUID.fromString(
-    "89248e86-48d1-43df-b25c-5c0e3dfb858f",
+    "a8193979-b221-4813-b81c-f6756ab38f0e",
   );
-  final UUID modeCharUUID = UUID.fromString(
-    "66b9319f-992b-412a-8f7e-3424dfbefbf1",
-  );
-  final UUID zoneCharUUID = UUID.fromString(
-    "34b4b3e1-8607-468b-b9fc-261421e8890a",
-  );
-  final UUID triggerCharUUID = UUID.fromString(
-    "b1814cf7-688f-4198-a9e2-9a889d186cf8",
-  );
-  final UUID intensidadCharUUID = UUID.fromString(
-    "6b78dc9f-c104-4d5a-a336-902e8ad78f2c",
-  );
-  final UUID frecuenciaCharUUID = UUID.fromString(
-    "7be2b410-1d3e-4449-8586-9495fc48669c",
+  final UUID writeCharUUID = UUID.fromString(
+    "a8193979-b221-4813-b81c-f6756ab38f0f",
   );
 
-  // Características GATT
-  GATTCharacteristic? _modeChar;
-  GATTCharacteristic? _zoneChar;
-  GATTCharacteristic? _triggerChar;
-  GATTCharacteristic? _intensidadChar;
-  GATTCharacteristic? _frecuenciaChar;
+  GATTCharacteristic? _writeChar;
+
+  // Valores UI
+  final TextEditingController _intensityColorController =
+      TextEditingController();
+  final TextEditingController _durationVibrationController =
+      TextEditingController();
+
+  String? _selectedColor;
+  String? _selectedSide; // "right" o "left"
+  final Map<String, Color> _colors = {
+    "Rojo": Colors.red,
+    "Verde": Colors.green,
+    "Azul": Colors.blue,
+    "Amarillo": Colors.yellow,
+    "Cyan": Colors.cyan,
+  };
 
   @override
   void initState() {
@@ -54,101 +50,212 @@ class _PeripheralPageState extends State<PeripheralPage> {
   Future<void> _connect() async {
     try {
       await _manager.connect(widget.peripheral);
+
       final services = await _manager.discoverGATT(widget.peripheral);
 
-      // buscar el servicio principal
       final service = services.firstWhere(
         (s) => s.uuid == serviceUUID,
         orElse: () => throw Exception("Servicio no encontrado"),
       );
 
-      // buscar todas las características
-      _modeChar = service.characteristics.firstWhere(
-        (c) => c.uuid == modeCharUUID,
-        orElse: _throwNotFound,
+      _writeChar = service.characteristics.firstWhere(
+        (c) => c.uuid == writeCharUUID,
+        orElse: () => throw Exception("Característica no encontrada"),
       );
-      _zoneChar = service.characteristics.firstWhere(
-        (c) => c.uuid == zoneCharUUID,
-        orElse: _throwNotFound,
-      );
-      _triggerChar = service.characteristics.firstWhere(
-        (c) => c.uuid == triggerCharUUID,
-        orElse: _throwNotFound,
-      );
-      _intensidadChar = service.characteristics.firstWhere(
-        (c) => c.uuid == intensidadCharUUID,
-        orElse: _throwNotFound,
-      );
-      _frecuenciaChar = service.characteristics.firstWhere(
-        (c) => c.uuid == frecuenciaCharUUID,
-        orElse: _throwNotFound,
-      );
-
-      // Escribir valores iniciales fijos (como el ejemplo JS)
-      await _writeFixedValues();
 
       setState(() => _connected = true);
+      debugPrint("✅ Conectado al dispositivo: ${widget.peripheral.uuid}");
     } catch (e) {
-      debugPrint("Error al conectar: $e");
+      debugPrint("❌ Error al conectar: $e");
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error al conectar: $e")));
     }
   }
 
-  Never _throwNotFound() =>
-      throw Exception("Característica requerida no encontrada");
-
-  Future<void> _writeFixedValues() async {
-    if (_modeChar == null || _zoneChar == null || _triggerChar == null) return;
-
-    await _manager.writeCharacteristic(
-      widget.peripheral,
-      _modeChar!,
-      value: Uint8List.fromList([0x01]),
-      type: GATTCharacteristicWriteType.withResponse,
-    );
-
-    await _manager.writeCharacteristic(
-      widget.peripheral,
-      _zoneChar!,
-      value: Uint8List.fromList([0x07]),
-      type: GATTCharacteristicWriteType.withResponse,
-    );
-
-    await _manager.writeCharacteristic(
-      widget.peripheral,
-      _triggerChar!,
-      value: Uint8List.fromList([0x01]),
-      type: GATTCharacteristicWriteType.withResponse,
-    );
-  }
-
   Future<void> _disconnect() async {
     await _manager.disconnect(widget.peripheral);
     setState(() => _connected = false);
+    debugPrint("🔌 Desconectado del dispositivo: ${widget.peripheral.uuid}");
     Navigator.pop(context);
   }
 
-  Future<void> _sendIntensity() async {
-    if (_intensidadChar == null) return;
-    final val = (_intensidad * 100).round() + 128;
-    await _manager.writeCharacteristic(
-      widget.peripheral,
-      _intensidadChar!,
-      value: Uint8List.fromList([val]),
-      type: GATTCharacteristicWriteType.withResponse,
-    );
+  Future<void> _sendToBLE() async {
+    final int? intensity = int.tryParse(_intensityColorController.text);
+    final int? duration = int.tryParse(_durationVibrationController.text);
+    final int? colorIndex = _selectedColor != null
+        ? _colors.keys.toList().indexOf(_selectedColor!) + 1
+        : null;
+
+    if (intensity == null ||
+        duration == null ||
+        colorIndex == null ||
+        _selectedSide == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Complete todos los campos")),
+      );
+      return;
+    }
+
+    final Map<String, dynamic> data = {
+      "Dr": _selectedSide,
+      "in": intensity,
+      "col": colorIndex,
+      "Dur": duration,
+    };
+
+    // Convertir a JSON string y luego a bytes (igual que en Python)
+    final jsonStr = json.encode(data);
+    final bytes = Uint8List.fromList(utf8.encode(jsonStr)); // Usar UTF-8
+
+    debugPrint("✅ Datos enviados al BLE: $jsonStr");
+
+    try {
+      //sonido
+
+      //relentice
+
+      //BLE
+      await _manager.writeCharacteristic(
+        widget.peripheral,
+        _writeChar!,
+        value: bytes,
+        type: GATTCharacteristicWriteType.withResponse,
+      );
+      debugPrint("✅ Datos enviados al BLE: $data");
+    } catch (e) {
+      debugPrint("❌ Error enviando al BLE: $e");
+    }
   }
 
-  Future<void> _sendFrequency() async {
-    if (_frecuenciaChar == null) return;
-    final val = (_frecuencia * 100).round() + 129;
-    await _manager.writeCharacteristic(
-      widget.peripheral,
-      _frecuenciaChar!,
-      value: Uint8List.fromList([val]),
-      type: GATTCharacteristicWriteType.withResponse,
+  Widget _buildForm() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Fila de tiempo y duración vibración en 2 columnas
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _intensityColorController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Intensidad de color",
+                    border: OutlineInputBorder(),
+                    helperText: "Ingrese la intensidad (max. 255)",
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextField(
+                  controller: _durationVibrationController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Duración vibración (ms)",
+                    border: OutlineInputBorder(),
+                    helperText: "Ingrese duración vibración",
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Selector de color
+          DropdownButtonFormField<String>(
+            decoration: const InputDecoration(
+              labelText: "Seleccione un color",
+              border: OutlineInputBorder(),
+            ),
+            value: _selectedColor,
+            items: _colors.keys
+                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                .toList(),
+            onChanged: (val) {
+              setState(() {
+                _selectedColor = val;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // Card con color elegido
+          if (_selectedColor != null)
+            Card(
+              color: _colors[_selectedColor],
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SizedBox(
+                height: 80,
+                child: Center(
+                  child: Text(
+                    _selectedColor!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 30),
+
+          // Selección Derecho / Izquierdo en fila
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton(
+                onPressed: () {
+                  setState(() => _selectedSide = "right");
+                },
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(130, 55),
+                  backgroundColor: _selectedSide == "right"
+                      ? Colors.blue
+                      : Colors.grey,
+                ),
+                child: const Text("Derecho", style: TextStyle(fontSize: 16)),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() => _selectedSide = "left");
+                },
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(130, 55),
+                  backgroundColor: _selectedSide == "left"
+                      ? Colors.blue
+                      : Colors.grey,
+                ),
+                child: const Text("Izquierdo", style: TextStyle(fontSize: 16)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 30),
+
+          // Botón central enviar
+          ElevatedButton.icon(
+            onPressed: _sendToBLE,
+            icon: const Icon(Icons.send),
+            label: const Text("Enviar comando"),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 55),
+              textStyle: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -156,45 +263,18 @@ class _PeripheralPageState extends State<PeripheralPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("${widget.peripheral.uuid}"),
+        title: const Text("Demo BLE"),
         actions: [
           if (_connected)
             IconButton(icon: const Icon(Icons.close), onPressed: _disconnect),
         ],
       ),
-      body: !_connected
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  const Text("Intensidad"),
-                  Slider(
-                    min: 0,
-                    max: 1,
-                    divisions: 100,
-                    value: _intensidad,
-                    onChanged: (v) => setState(() => _intensidad = v),
-                    onChangeEnd: (_) => _sendIntensity(),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text("Frecuencia"),
-                  Slider(
-                    min: 0,
-                    max: 1,
-                    divisions: 100,
-                    value: _frecuencia,
-                    onChanged: (v) => setState(() => _frecuencia = v),
-                    onChangeEnd: (_) => _sendFrequency(),
-                  ),
-                  const SizedBox(height: 40),
-                  ElevatedButton(
-                    onPressed: _disconnect,
-                    child: const Text("Desconectar y volver"),
-                  ),
-                ],
-              ),
-            ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: _connected
+            ? _buildForm()
+            : const Center(child: CircularProgressIndicator()),
+      ),
     );
   }
 }
