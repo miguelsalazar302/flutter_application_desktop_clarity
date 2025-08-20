@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
@@ -16,6 +17,11 @@ class _PeripheralPageState extends State<PeripheralPage> {
   final CentralManager _manager = CentralManager();
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _connected = false;
+
+  bool _isRunning = false;
+  int _cycleCount = 0;
+  int _frequencyMs = 1000; // frecuencia inicial en ms
+  Timer? _cycleTimer;
 
   // UUIDs
   final UUID serviceUUID = UUID.fromString(
@@ -175,6 +181,70 @@ class _PeripheralPageState extends State<PeripheralPage> {
     }
   }
 
+  void _toggleFrequency() {
+    if (int.tryParse(_intensityColorController.text) == null ||
+        int.tryParse(_durationVibrationController.text) == null ||
+        _selectedSide == null ||
+        int.tryParse(_delayController.text) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Complete todos los campos de configuracion y pruebe manualmente de ser necesario",
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (_isRunning) {
+      // Detener
+      _cycleTimer?.cancel();
+      setState(() => _isRunning = false);
+    } else {
+      // Iniciar
+      setState(() {
+        _isRunning = true;
+        _cycleCount = 0;
+      });
+
+      _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
+        timer,
+      ) async {
+        // Alternar lado automáticamente
+        setState(() {
+          _selectedSide = (_selectedSide == "left") ? "right" : "left";
+          _cycleCount++;
+        });
+
+        // Llamar al flujo de audio+BLE
+        await _sendToBLE();
+      });
+    }
+  }
+
+  void _changeFrequency(int delta) {
+    setState(() {
+      _frequencyMs = (_frequencyMs + delta).clamp(
+        200,
+        5000,
+      ); // rango 200ms - 5s
+    });
+
+    if (_isRunning) {
+      // Reiniciar con nueva frecuencia
+      _cycleTimer?.cancel();
+      _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
+        timer,
+      ) async {
+        setState(() {
+          _selectedSide = (_selectedSide == "left") ? "right" : "left";
+          _cycleCount++;
+        });
+        await _sendToBLE();
+      });
+    }
+  }
+
   Widget _buildForm() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -247,30 +317,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
 
-          // Card con color elegido
-          if (_selectedColor != null)
-            Card(
-              color: _colors[_selectedColor],
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: SizedBox(
-                height: 80,
-                child: Center(
-                  child: Text(
-                    _selectedColor!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
           const SizedBox(height: 30),
 
           // Selección Derecho / Izquierdo en fila
@@ -326,6 +373,51 @@ class _PeripheralPageState extends State<PeripheralPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
+          ),
+
+          const SizedBox(height: 30),
+          const Divider(thickness: 2),
+          const SizedBox(height: 20),
+
+          // 🔹 Sección de frecuencia EMDR
+          Text(
+            "Frecuencia (ms): $_frequencyMs",
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.remove),
+                onPressed: () => _changeFrequency(-100),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: () => _changeFrequency(100),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          ElevatedButton(
+            onPressed: _toggleFrequency,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 55),
+              backgroundColor: _isRunning ? Colors.red : Colors.green,
+            ),
+            child: Text(
+              _isRunning ? "Detener frecuencia" : "Iniciar frecuencia",
+              style: TextStyle(fontSize: 16, color: Colors.white),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // 🔹 Mostrar ciclos realizados
+          Text(
+            "Ciclos completados: $_cycleCount",
+            style: const TextStyle(fontSize: 16),
           ),
         ],
       ),
