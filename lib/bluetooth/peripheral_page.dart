@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:convert';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
 
@@ -13,6 +14,7 @@ class PeripheralPage extends StatefulWidget {
 
 class _PeripheralPageState extends State<PeripheralPage> {
   final CentralManager _manager = CentralManager();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   bool _connected = false;
 
   // UUIDs
@@ -30,9 +32,12 @@ class _PeripheralPageState extends State<PeripheralPage> {
       TextEditingController();
   final TextEditingController _durationVibrationController =
       TextEditingController();
+  final TextEditingController _delayController = TextEditingController(
+    text: "100",
+  );
 
   String? _selectedColor;
-  String? _selectedSide; // "right" o "left"
+  String? _selectedSide;
   final Map<String, Color> _colors = {
     "Rojo": Colors.red,
     "Verde": Colors.green,
@@ -45,6 +50,39 @@ class _PeripheralPageState extends State<PeripheralPage> {
   void initState() {
     super.initState();
     _connect();
+    _setupAudioPlayer();
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _setupAudioPlayer() async {
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      debugPrint(" _setupAudioPlayer: $state");
+    });
+  }
+
+  Future<void> _playSound() async {
+    try {
+      // Configurar el balance estéreo según el lado seleccionado
+      final balance = _selectedSide == "right"
+          ? 1.0
+          : _selectedSide == "left"
+          ? -1.0
+          : 0.0;
+
+      await _audioPlayer.setBalance(balance);
+
+      // Reproducir el sonido desde assets
+      await _audioPlayer.play(AssetSource('audio.mp3'), volume: 1.0);
+
+      debugPrint("🔊 Reproduciendo sonido en canal: $_selectedSide");
+    } catch (e) {
+      debugPrint("❌ Error reproduciendo sonido: $e");
+    }
   }
 
   Future<void> _connect() async {
@@ -86,45 +124,54 @@ class _PeripheralPageState extends State<PeripheralPage> {
     final int? colorIndex = _selectedColor != null
         ? _colors.keys.toList().indexOf(_selectedColor!) + 1
         : null;
+    final int? delayMs = int.tryParse(_delayController.text);
 
     if (intensity == null ||
         duration == null ||
         colorIndex == null ||
-        _selectedSide == null) {
+        _selectedSide == null ||
+        delayMs == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Complete todos los campos")),
       );
       return;
     }
 
-    final Map<String, dynamic> data = {
-      "Dr": _selectedSide,
-      "in": intensity,
-      "col": colorIndex,
-      "Dur": duration,
-    };
-
-    // Convertir a JSON string y luego a bytes (igual que en Python)
-    final jsonStr = json.encode(data);
-    final bytes = Uint8List.fromList(utf8.encode(jsonStr)); // Usar UTF-8
-
-    debugPrint("✅ Datos enviados al BLE: $jsonStr");
-
     try {
-      //sonido
+      // 1️⃣ Iniciar audio
+      debugPrint("🎵 Reproduciendo sonido...");
+      await _playSound();
 
-      //relentice
+      // 2️⃣ Esperar el retraso configurado
+      debugPrint("⏱ Esperando $delayMs ms antes de enviar BLE...");
+      await Future.delayed(Duration(milliseconds: delayMs));
 
-      //BLE
+      // 3️⃣ Preparar y enviar datos BLE
+      final Map<String, dynamic> data = {
+        "Dr": _selectedSide,
+        "in": intensity,
+        "col": colorIndex,
+        "Dur": duration,
+      };
+
+      final jsonStr = json.encode(data);
+      final bytes = Uint8List.fromList(utf8.encode(jsonStr));
+
+      debugPrint("✅ Enviando datos al BLE: $jsonStr");
+
       await _manager.writeCharacteristic(
         widget.peripheral,
         _writeChar!,
         value: bytes,
         type: GATTCharacteristicWriteType.withResponse,
       );
-      debugPrint("✅ Datos enviados al BLE: $data");
+
+      debugPrint("✅ Comando BLE enviado correctamente");
     } catch (e) {
-      debugPrint("❌ Error enviando al BLE: $e");
+      debugPrint("❌ Error en el proceso: $e");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
@@ -165,20 +212,40 @@ class _PeripheralPageState extends State<PeripheralPage> {
           const SizedBox(height: 20),
 
           // Selector de color
-          DropdownButtonFormField<String>(
-            decoration: const InputDecoration(
-              labelText: "Seleccione un color",
-              border: OutlineInputBorder(),
-            ),
-            value: _selectedColor,
-            items: _colors.keys
-                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                .toList(),
-            onChanged: (val) {
-              setState(() {
-                _selectedColor = val;
-              });
-            },
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: "Seleccione un color",
+                    helperText: "Ingrese un color",
+                    border: OutlineInputBorder(),
+                  ),
+                  value: _selectedColor,
+                  items: _colors.keys
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedColor = val;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Delay sincronización
+              Expanded(
+                child: TextField(
+                  controller: _delayController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Retraso audio → BLE (ms)",
+                    border: OutlineInputBorder(),
+                    helperText: "Ingrese el retraso en milisegundos",
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -212,18 +279,6 @@ class _PeripheralPageState extends State<PeripheralPage> {
             children: [
               ElevatedButton(
                 onPressed: () {
-                  setState(() => _selectedSide = "right");
-                },
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(130, 55),
-                  backgroundColor: _selectedSide == "right"
-                      ? Colors.blue
-                      : Colors.grey,
-                ),
-                child: const Text("Derecho", style: TextStyle(fontSize: 16)),
-              ),
-              ElevatedButton(
-                onPressed: () {
                   setState(() => _selectedSide = "left");
                 },
                 style: ElevatedButton.styleFrom(
@@ -232,7 +287,25 @@ class _PeripheralPageState extends State<PeripheralPage> {
                       ? Colors.blue
                       : Colors.grey,
                 ),
-                child: const Text("Izquierdo", style: TextStyle(fontSize: 16)),
+                child: const Text(
+                  "Izquierdo",
+                  style: TextStyle(fontSize: 16, color: Colors.white),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() => _selectedSide = "right");
+                },
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(130, 55),
+                  backgroundColor: _selectedSide == "right"
+                      ? Colors.blue
+                      : Colors.grey,
+                ),
+                child: const Text(
+                  "Derecho",
+                  style: TextStyle(fontSize: 16, color: Colors.white),
+                ),
               ),
             ],
           ),
