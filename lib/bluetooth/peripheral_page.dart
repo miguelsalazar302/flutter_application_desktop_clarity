@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
@@ -22,6 +23,8 @@ class _PeripheralPageState extends State<PeripheralPage> {
   int _cycleCount = 0;
   int _frequencyMs = 1000; // frecuencia inicial en ms
   Timer? _cycleTimer;
+
+  double _speed = 5.0; // velocidad inicial (0.5 a 10)
 
   // UUIDs
   final UUID serviceUUID = UUID.fromString(
@@ -222,27 +225,44 @@ class _PeripheralPageState extends State<PeripheralPage> {
     }
   }
 
-  void _changeFrequency(int delta) {
+  void _updateFrequencyFromSpeed(double speed) {
     setState(() {
-      _frequencyMs = (_frequencyMs + delta).clamp(
-        200,
-        5000,
-      ); // rango 200ms - 5s
-    });
+      _speed = speed; // mantener la velocidad visual (0.5 a 10)
 
-    if (_isRunning) {
-      // Reiniciar con nueva frecuencia
-      _cycleTimer?.cancel();
-      _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
-        timer,
-      ) async {
-        setState(() {
-          _selectedSide = (_selectedSide == "left") ? "right" : "left";
-          _cycleCount++;
+      // Convertir la velocidad visual (0.5-10) a velocidad efectiva (0.5-9)
+      double effectiveSpeed = 0.5 + ((speed - 0.5) * (9 - 0.5)) / (10 - 0.5);
+
+      // Mapear velocidad efectiva (0.5-9) a tiempo (2000ms-659ms)
+      // Usamos una función exponencial para una progresión más suave
+      final minTime = 659.0; // tiempo mínimo (velocidad 9)
+      final maxTime = 2000.0; // tiempo máximo (velocidad 0.5)
+
+      // Factor de exponenciación (ajustable para cambiar la curva)
+      const exponent = 1.5;
+
+      // Calcular el tiempo normalizado (0 a 1)
+      double normalizedSpeed = (effectiveSpeed - 0.5) / (9 - 0.5);
+
+      // Aplicar curva exponencial
+      double curvedSpeed = pow(normalizedSpeed, exponent).toDouble();
+
+      // Calcular el tiempo resultante
+      _frequencyMs = (maxTime - curvedSpeed * (maxTime - minTime)).round();
+
+      // Reiniciar timer si está corriendo
+      if (_isRunning) {
+        _cycleTimer?.cancel();
+        _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
+          timer,
+        ) async {
+          setState(() {
+            _selectedSide = (_selectedSide == "left") ? "right" : "left";
+            _cycleCount++;
+          });
+          await _sendToBLE();
         });
-        await _sendToBLE();
-      });
-    }
+      }
+    });
   }
 
   Widget _buildForm() {
@@ -379,26 +399,24 @@ class _PeripheralPageState extends State<PeripheralPage> {
           const Divider(thickness: 2),
           const SizedBox(height: 20),
 
-          // 🔹 Sección de frecuencia EMDR
+          // 🔹 Velocidad con Slider
           Text(
-            "Frecuencia (ms): $_frequencyMs",
+            "Velocidad: ${_speed.toStringAsFixed(1)}x",
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.remove),
-                onPressed: () => _changeFrequency(-100),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add),
-                onPressed: () => _changeFrequency(100),
-              ),
-            ],
+          Slider(
+            value: _speed,
+            min: 0.5,
+            max: 10,
+            divisions: 19, // pasos de 0.5
+            label: "${_speed.toStringAsFixed(1)}x",
+            onChanged: (val) => _updateFrequencyFromSpeed(val),
           ),
-          const SizedBox(height: 10),
+          Text(
+            "Tiempo por lado: $_frequencyMs ms",
+            style: const TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          const SizedBox(height: 20),
 
           ElevatedButton(
             onPressed: _toggleFrequency,
@@ -408,7 +426,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
             ),
             child: Text(
               _isRunning ? "Detener frecuencia" : "Iniciar frecuencia",
-              style: TextStyle(fontSize: 16, color: Colors.white),
+              style: const TextStyle(fontSize: 16, color: Colors.white),
             ),
           ),
 
