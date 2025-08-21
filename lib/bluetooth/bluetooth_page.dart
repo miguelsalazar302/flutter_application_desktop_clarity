@@ -72,7 +72,7 @@ class _BluetoothPageState extends State<BluetoothPage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text('Flutter Demo Home Page'),
+        title: Text('BLE Demo'),
         actions: [
           if (state == BluetoothLowEnergyState.poweredOn)
             ElevatedButton(
@@ -94,17 +94,17 @@ class _BluetoothPageState extends State<BluetoothPage> {
       return Center(
         child: ElevatedButton(
           onPressed: () => _manager.showAppSettings(),
-          child: const Text("Dar permisos"),
+          child: const Text("Grant permissions"),
         ),
       );
     }
 
     if (state != BluetoothLowEnergyState.poweredOn) {
-      return Center(child: Text("Estado: $state"));
+      return Center(child: Text("State: $state"));
     }
 
     if (_discoveries.isEmpty) {
-      return const Center(child: Text("No hay dispositivos encontrados"));
+      return const Center(child: Text("No devices found"));
     }
 
     return ListView.separated(
@@ -112,7 +112,7 @@ class _BluetoothPageState extends State<BluetoothPage> {
       separatorBuilder: (_, __) => const Divider(height: 0),
       itemBuilder: (context, index) {
         final discovery = _discoveries[index];
-        final name = discovery.advertisement.name ?? "Sin nombre";
+        final name = discovery.advertisement.name ?? "Unnamed";
         final uuid = discovery.peripheral.uuid;
         return ListTile(
           title: Text(name),
@@ -126,10 +126,14 @@ class _BluetoothPageState extends State<BluetoothPage> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    PeripheralPage(peripheral: discovery.peripheral),
+                builder: (_) => PeripheralPage(
+                  peripheral: discovery.peripheral,
+                  name: name,
+                ),
               ),
-            );
+            ).then((resultado) {
+              _startDiscovery();
+            });
           },
         );
       },

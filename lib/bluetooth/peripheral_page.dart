@@ -8,7 +8,12 @@ import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
 
 class PeripheralPage extends StatefulWidget {
   final Peripheral peripheral;
-  const PeripheralPage({super.key, required this.peripheral});
+  final String name;
+  const PeripheralPage({
+    super.key,
+    required this.peripheral,
+    required this.name,
+  });
 
   @override
   State<PeripheralPage> createState() => _PeripheralPageState();
@@ -37,16 +42,22 @@ class _PeripheralPageState extends State<PeripheralPage> {
   GATTCharacteristic? _writeChar;
 
   // Valores UI
-  final TextEditingController _intensityColorController =
-      TextEditingController();
-  final TextEditingController _durationVibrationController =
-      TextEditingController();
+  final TextEditingController _intensityColorController = TextEditingController(
+    text: "100",
+  );
+  final TextEditingController _vinController = TextEditingController(
+    text: "50",
+  );
+  final TextEditingController _vspController = TextEditingController(
+    text: "50",
+  );
   final TextEditingController _delayController = TextEditingController(
     text: "100",
   );
 
   String? _selectedColor;
   String? _selectedSide;
+
   final Map<String, Color> _colors = {
     "Rojo": Colors.red,
     "Verde": Colors.green,
@@ -129,20 +140,22 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
   Future<void> _sendToBLE() async {
     final int? intensity = int.tryParse(_intensityColorController.text);
-    final int? duration = int.tryParse(_durationVibrationController.text);
+    final int? vin = int.tryParse(_vinController.text);
+    final int? vsp = int.tryParse(_vspController.text);
     final int? colorIndex = _selectedColor != null
         ? _colors.keys.toList().indexOf(_selectedColor!) + 1
         : null;
     final int? delayMs = int.tryParse(_delayController.text);
 
     if (intensity == null ||
-        duration == null ||
+        vin == null ||
+        vsp == null ||
         colorIndex == null ||
         _selectedSide == null ||
         delayMs == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Complete todos los campos")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Complete all fields")));
       return;
     }
 
@@ -158,9 +171,10 @@ class _PeripheralPageState extends State<PeripheralPage> {
       // 3️⃣ Preparar y enviar datos BLE
       final Map<String, dynamic> data = {
         "Dr": _selectedSide,
-        "in": intensity,
-        "col": colorIndex,
-        "Dur": duration,
+        "In": intensity,
+        "Col": colorIndex,
+        "Vin": vin,
+        "Vsp": vsp,
       };
 
       final jsonStr = json.encode(data);
@@ -186,13 +200,14 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
   void _toggleFrequency() {
     if (int.tryParse(_intensityColorController.text) == null ||
-        int.tryParse(_durationVibrationController.text) == null ||
+        int.tryParse(_vinController.text) == null ||
+        int.tryParse(_vspController.text) == null ||
         _selectedSide == null ||
         int.tryParse(_delayController.text) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Complete todos los campos de configuracion y pruebe manualmente de ser necesario",
+            "Complete all configuration fields and test manually if necessary.",
           ),
         ),
       );
@@ -276,24 +291,24 @@ class _PeripheralPageState extends State<PeripheralPage> {
             children: [
               Expanded(
                 child: TextField(
-                  controller: _intensityColorController,
+                  controller: _vinController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: "Intensidad de color",
+                    labelText: "Intensity de vibration",
                     border: OutlineInputBorder(),
-                    helperText: "Ingrese la intensidad (max. 255)",
+                    helperText: "Range: 0-100",
                   ),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: TextField(
-                  controller: _durationVibrationController,
+                  controller: _vspController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: "Duración vibración (ms)",
+                    labelText: "Speed de vibration",
                     border: OutlineInputBorder(),
-                    helperText: "Ingrese duración vibración",
+                    helperText: "Range: 0-100",
                   ),
                 ),
               ),
@@ -307,8 +322,8 @@ class _PeripheralPageState extends State<PeripheralPage> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   decoration: const InputDecoration(
-                    labelText: "Seleccione un color",
-                    helperText: "Ingrese un color",
+                    labelText: "Select a color",
+                    helperText: "Enter a color",
                     border: OutlineInputBorder(),
                   ),
                   value: _selectedColor,
@@ -323,15 +338,15 @@ class _PeripheralPageState extends State<PeripheralPage> {
                 ),
               ),
               const SizedBox(width: 16),
-              // Delay sincronización
+
               Expanded(
                 child: TextField(
-                  controller: _delayController,
+                  controller: _intensityColorController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: "Retraso audio → BLE (ms)",
+                    labelText: "Color intensity",
                     border: OutlineInputBorder(),
-                    helperText: "Ingrese el retraso en milisegundos",
+                    helperText: "Enter the intensity (max. 255)",
                   ),
                 ),
               ),
@@ -339,6 +354,24 @@ class _PeripheralPageState extends State<PeripheralPage> {
           ),
 
           const SizedBox(height: 30),
+
+          // Delay sincronización
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _delayController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Audio Delay → BLE (ms)",
+                    border: OutlineInputBorder(),
+                    helperText: "Enter the delay in milliseconds",
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+            ],
+          ),
 
           // Selección Derecho / Izquierdo en fila
           Row(
@@ -355,7 +388,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
                       : Colors.grey,
                 ),
                 child: const Text(
-                  "Izquierdo",
+                  "Left",
                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
               ),
@@ -370,7 +403,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
                       : Colors.grey,
                 ),
                 child: const Text(
-                  "Derecho",
+                  "Right",
                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
               ),
@@ -382,7 +415,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
           ElevatedButton.icon(
             onPressed: _sendToBLE,
             icon: const Icon(Icons.send),
-            label: const Text("Enviar comando"),
+            label: const Text("Send command"),
             style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 55),
               textStyle: const TextStyle(
@@ -401,7 +434,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
           // 🔹 Velocidad con Slider
           Text(
-            "Velocidad: ${_speed.toStringAsFixed(1)}x",
+            "Speed: ${_speed.toStringAsFixed(1)}x",
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           Slider(
@@ -413,7 +446,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
             onChanged: (val) => _updateFrequencyFromSpeed(val),
           ),
           Text(
-            "Tiempo por lado: $_frequencyMs ms",
+            "Time per side: $_frequencyMs ms",
             style: const TextStyle(fontSize: 16, color: Colors.grey),
           ),
           const SizedBox(height: 20),
@@ -425,7 +458,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
               backgroundColor: _isRunning ? Colors.red : Colors.green,
             ),
             child: Text(
-              _isRunning ? "Detener frecuencia" : "Iniciar frecuencia",
+              _isRunning ? "Stop frequency" : "Start frequency",
               style: const TextStyle(fontSize: 16, color: Colors.white),
             ),
           ),
@@ -434,7 +467,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
           // 🔹 Mostrar ciclos realizados
           Text(
-            "Ciclos completados: $_cycleCount",
+            "Completed cycles: $_cycleCount",
             style: const TextStyle(fontSize: 16),
           ),
         ],
@@ -446,7 +479,11 @@ class _PeripheralPageState extends State<PeripheralPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Demo BLE"),
+        title: Text(widget.name),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _disconnect,
+        ),
         actions: [
           if (_connected)
             IconButton(icon: const Icon(Icons.close), onPressed: _disconnect),
