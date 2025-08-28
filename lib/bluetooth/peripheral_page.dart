@@ -55,8 +55,8 @@ class _PeripheralPageState extends State<PeripheralPage> {
     text: "100",
   );
 
-  String? _selectedColor;
-  String? _selectedSide;
+  String? _selectedColor = "Verde";
+  String? _selectedSide = "right";
 
   final Map<String, Color> _colors = {
     "Rojo": Colors.red,
@@ -70,39 +70,12 @@ class _PeripheralPageState extends State<PeripheralPage> {
   void initState() {
     super.initState();
     _connect();
-    _setupAudioPlayer();
   }
 
   @override
   void dispose() {
     _audioPlayer.dispose();
     super.dispose();
-  }
-
-  Future<void> _setupAudioPlayer() async {
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      debugPrint(" _setupAudioPlayer: $state");
-    });
-  }
-
-  Future<void> _playSound() async {
-    try {
-      // Configurar el balance estéreo según el lado seleccionado
-      final balance = _selectedSide == "right"
-          ? 1.0
-          : _selectedSide == "left"
-          ? -1.0
-          : 0.0;
-
-      await _audioPlayer.setBalance(balance);
-
-      // Reproducir el sonido desde assets
-      await _audioPlayer.play(AssetSource('audio.mp3'), volume: 1.0);
-
-      debugPrint("🔊 Reproduciendo sonido en canal: $_selectedSide");
-    } catch (e) {
-      debugPrint("❌ Error reproduciendo sonido: $e");
-    }
   }
 
   Future<void> _connect() async {
@@ -136,6 +109,26 @@ class _PeripheralPageState extends State<PeripheralPage> {
     setState(() => _connected = false);
     debugPrint("🔌 Desconectado del dispositivo: ${widget.peripheral.uuid}");
     Navigator.pop(context);
+  }
+
+  Future<void> _playSound() async {
+    try {
+      // Configurar el balance estéreo según el lado seleccionado
+      final balance = _selectedSide == "right"
+          ? 1.0
+          : _selectedSide == "left"
+          ? -1.0
+          : 0.0;
+
+      await _audioPlayer.setBalance(balance);
+
+      // Reproducir el sonido desde assets
+      await _audioPlayer.play(AssetSource('audio.mp3'), volume: 1.0);
+
+      debugPrint("🔊 Reproduciendo sonido en canal: $_selectedSide");
+    } catch (e) {
+      debugPrint("❌ Error reproduciendo sonido: $e");
+    }
   }
 
   Future<void> _sendToBLE() async {
