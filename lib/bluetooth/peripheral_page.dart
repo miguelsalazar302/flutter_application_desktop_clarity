@@ -57,6 +57,8 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
   String? _selectedColor = "Verde";
   String? _selectedSide = "right";
+  String _animationType =
+      "horizontal"; // horizontal | vertical | diagonal-right | diagonal-left
 
   final Map<String, Color> _colors = {
     "Rojo": Colors.red,
@@ -221,13 +223,18 @@ class _PeripheralPageState extends State<PeripheralPage> {
       _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
         timer,
       ) async {
-        // Alternar lado automáticamente
+        // Alternar lado
         setState(() {
           _selectedSide = (_selectedSide == "left") ? "right" : "left";
           _cycleCount++;
         });
 
-        // Llamar al flujo de audio+BLE
+        // Esperar a que la animación llegue al borde
+        await Future.delayed(
+          Duration(milliseconds: max(_frequencyMs ~/ 2, 50)),
+        );
+
+        // Audio + BLE sincronizado con el borde
         await _sendToBLE();
       });
     }
@@ -462,6 +469,94 @@ class _PeripheralPageState extends State<PeripheralPage> {
           Text(
             "Completed cycles: $_cycleCount",
             style: const TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 20),
+
+          // 🔹 Contenedor visual ping-pong
+          Container(
+            width: 700,
+            height: 400,
+            color: Colors.grey[200],
+            child: Stack(
+              children: [
+                AnimatedAlign(
+                  alignment: _animationType == "horizontal"
+                      ? (_selectedSide == "left"
+                            ? Alignment.centerLeft
+                            : Alignment.centerRight)
+                      : _animationType == "vertical"
+                      ? (_selectedSide == "left"
+                            ? Alignment.topCenter
+                            : Alignment.bottomCenter)
+                      : _animationType == "diagonal-right"
+                      ? (_selectedSide == "left"
+                            ? Alignment.topLeft
+                            : Alignment.bottomRight)
+                      : (_selectedSide == "left"
+                            ? Alignment.topRight
+                            : Alignment.bottomLeft), // diagonal-left
+                  duration: Duration(
+                    milliseconds: max((_frequencyMs ~/ 2).round(), 50),
+                  ),
+                  curve: Curves.easeOut,
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: const BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              ElevatedButton(
+                onPressed: () => setState(() => _animationType = "horizontal"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _animationType == "horizontal"
+                      ? Colors.blue
+                      : Colors.grey,
+                ),
+                child: const Text("Izquierda → Derecha"),
+              ),
+              ElevatedButton(
+                onPressed: () => setState(() => _animationType = "vertical"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _animationType == "vertical"
+                      ? Colors.blue
+                      : Colors.grey,
+                ),
+                child: const Text("Arriba → Abajo"),
+              ),
+              ElevatedButton(
+                onPressed: () =>
+                    setState(() => _animationType = "diagonal-right"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _animationType == "diagonal-right"
+                      ? Colors.blue
+                      : Colors.grey,
+                ),
+                child: const Text("Diagonal ↘"),
+              ),
+              ElevatedButton(
+                onPressed: () =>
+                    setState(() => _animationType = "diagonal-left"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _animationType == "diagonal-left"
+                      ? Colors.blue
+                      : Colors.grey,
+                ),
+                child: const Text("Diagonal ↙"),
+              ),
+            ],
           ),
         ],
       ),
