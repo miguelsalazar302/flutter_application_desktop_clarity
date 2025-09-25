@@ -422,7 +422,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
                       : Colors.grey,
                 ),
                 child: const Text(
-                  "Left",
+                  "Left sound",
                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
               ),
@@ -437,7 +437,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
                       : Colors.grey,
                 ),
                 child: const Text(
-                  "Right",
+                  "Right sound",
                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
               ),
