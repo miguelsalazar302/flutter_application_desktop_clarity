@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
-import 'package:flutter/services.dart' show rootBundle;
 
 class PeripheralPage extends StatefulWidget {
   final Peripheral peripheral;
@@ -23,16 +22,14 @@ class PeripheralPage extends StatefulWidget {
 class _PeripheralPageState extends State<PeripheralPage> {
   final CentralManager _manager = CentralManager();
   final AudioPlayer _audioPlayer = AudioPlayer();
-  final Map<String, Uint8List> _cachedSounds = {};
   bool _connected = false;
 
   bool _isRunning = false;
   int _cycleCount = 0;
+  int _frequencyMs = 1000; // frecuencia inicial en ms
   Timer? _cycleTimer;
 
-  String _soundType = 'click-1125.mp3'; // sonido inicial
-  String _animationType =
-      "horizontal"; // horizontal | vertical | diagonal-right | diagonal-left
+  double _speed = 5.0; // velocidad inicial (0.5 a 10)
 
   // UUIDs
   final UUID serviceUUID = UUID.fromString(
@@ -55,12 +52,13 @@ class _PeripheralPageState extends State<PeripheralPage> {
     text: "50",
   );
   final TextEditingController _delayController = TextEditingController(
-    text: "0",
+    text: "100",
   );
 
   String? _selectedColor = "Verde";
-  String? _selectedSide =
-      "right"; // horizontal | vertical | diagonal-right | diagonal-left
+  String? _selectedSide = "right";
+  String _animationType =
+      "horizontal"; // horizontal | vertical | diagonal-right | diagonal-left
 
   final Map<String, Color> _colors = {
     "Rojo": Colors.red,
@@ -70,59 +68,16 @@ class _PeripheralPageState extends State<PeripheralPage> {
     "Cyan": Colors.cyan,
   };
 
-  // ordenada de más lento (4s) a más rápido (250 ms)
-  final List<int> _timeSteps = [
-    4000,
-    2500,
-    2000,
-    1700,
-    1500,
-    1350,
-    1000,
-    850,
-    750,
-    650,
-    625,
-    600,
-    550,
-    500,
-    450,
-    400,
-    375,
-    350,
-    325,
-    300,
-    275,
-    250,
-  ];
-
-  double _speedIndex = 6; // por ejemplo apunta a 1000ms inicial
-  int get _frequencyMs => _timeSteps[_speedIndex.round()];
-
   @override
   void initState() {
     super.initState();
-    _preloadSounds();
     _connect();
   }
 
   @override
   void dispose() {
     _audioPlayer.dispose();
-    _cycleTimer?.cancel();
     super.dispose();
-  }
-
-  Future<void> _preloadSounds() async {
-    // Lista de todos los audios posibles
-    const files = ['click-1125.mp3', 'tap-2585.mp3', 'select-3124.mp3'];
-
-    for (final f in files) {
-      final bytes = await rootBundle.load('assets/$f');
-      _cachedSounds[f] = bytes.buffer.asUint8List();
-    }
-
-    debugPrint("✅ Audios precargados en memoria");
   }
 
   Future<void> _connect() async {
@@ -160,6 +115,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
   Future<void> _playSound() async {
     try {
+      // Configurar el balance estéreo según el lado seleccionado
       final balance = _selectedSide == "right"
           ? 1.0
           : _selectedSide == "left"
@@ -168,16 +124,10 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
       await _audioPlayer.setBalance(balance);
 
-      final bytes = _cachedSounds[_soundType];
-      if (bytes == null) {
-        debugPrint("⚠️ Audio no precargado, reproduciendo desde assets");
-        await _audioPlayer.play(AssetSource(_soundType));
-        return;
-      }
+      // Reproducir el sonido desde assets
+      await _audioPlayer.play(AssetSource('audio.mp3'), volume: 1.0);
 
-      // Reproduce desde memoria directamente
-      await _audioPlayer.play(BytesSource(bytes));
-      debugPrint("🔊 Reproduciendo $_soundType en canal: $_selectedSide");
+      debugPrint("🔊 Reproduciendo sonido en canal: $_selectedSide");
     } catch (e) {
       debugPrint("❌ Error reproduciendo sonido: $e");
     }
@@ -207,13 +157,11 @@ class _PeripheralPageState extends State<PeripheralPage> {
     try {
       // 1️⃣ Iniciar audio
       debugPrint("🎵 Reproduciendo sonido...");
-      _playSound();
+      await _playSound();
 
       // 2️⃣ Esperar el retraso configurado
-      if (delayMs > 0) {
-        debugPrint("⏱ Esperando $delayMs ms antes de enviar BLE...");
-        await Future.delayed(Duration(milliseconds: delayMs));
-      }
+      debugPrint("⏱ Esperando $delayMs ms antes de enviar BLE...");
+      await Future.delayed(Duration(milliseconds: delayMs));
 
       // 3️⃣ Preparar y enviar datos BLE
       final Map<String, dynamic> data = {
@@ -275,41 +223,58 @@ class _PeripheralPageState extends State<PeripheralPage> {
       _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
         timer,
       ) async {
-        // 1️⃣ Cambiar lado de destino para que AnimatedAlign comience a moverse
+        // Alternar lado
         setState(() {
           _selectedSide = (_selectedSide == "left") ? "right" : "left";
           _cycleCount++;
         });
 
-        // 2️⃣ Esperar exactamente el tiempo que dura la animación
-        //    (el mismo _frequencyMs) antes de disparar audio+BLE
-        Future.delayed(Duration(milliseconds: _frequencyMs), () async {
-          await _sendToBLE(); // 🔊 click cuando ya llegó
-        });
+        // Esperar a que la animación llegue al borde
+        await Future.delayed(
+          Duration(milliseconds: max(_frequencyMs ~/ 2, 50)),
+        );
+
+        // Audio + BLE sincronizado con el borde
+        await _sendToBLE();
       });
     }
   }
 
-  void _updateFrequencyFromSpeed(double val) {
+  void _updateFrequencyFromSpeed(double speed) {
     setState(() {
-      _speedIndex = val;
-      // Reinicia el timer si está corriendo
+      _speed = speed; // mantener la velocidad visual (0.5 a 10)
+
+      // Convertir la velocidad visual (0.5-10) a velocidad efectiva (0.5-9)
+      double effectiveSpeed = 0.5 + ((speed - 0.5) * (9 - 0.5)) / (10 - 0.5);
+
+      // Mapear velocidad efectiva (0.5-9) a tiempo (2000ms-659ms)
+      // Usamos una función exponencial para una progresión más suave
+      final minTime = 659.0; // tiempo mínimo (velocidad 9)
+      final maxTime = 2000.0; // tiempo máximo (velocidad 0.5)
+
+      // Factor de exponenciación (ajustable para cambiar la curva)
+      const exponent = 1.5;
+
+      // Calcular el tiempo normalizado (0 a 1)
+      double normalizedSpeed = (effectiveSpeed - 0.5) / (9 - 0.5);
+
+      // Aplicar curva exponencial
+      double curvedSpeed = pow(normalizedSpeed, exponent).toDouble();
+
+      // Calcular el tiempo resultante
+      _frequencyMs = (maxTime - curvedSpeed * (maxTime - minTime)).round();
+
+      // Reiniciar timer si está corriendo
       if (_isRunning) {
         _cycleTimer?.cancel();
         _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
           timer,
         ) async {
-          // 1️⃣ Cambiar lado de destino para que AnimatedAlign comience a moverse
           setState(() {
             _selectedSide = (_selectedSide == "left") ? "right" : "left";
             _cycleCount++;
           });
-
-          // 2️⃣ Esperar exactamente el tiempo que dura la animación
-          //    (el mismo _frequencyMs) antes de disparar audio+BLE
-          Future.delayed(Duration(milliseconds: _frequencyMs), () async {
-            await _sendToBLE(); // 🔊 click cuando ya llegó
-          });
+          await _sendToBLE();
         });
       }
     });
@@ -469,15 +434,15 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
           // 🔹 Velocidad con Slider
           Text(
-            "Speed: ${_speedIndex.toStringAsFixed(1)}x",
+            "Speed: ${_speed.toStringAsFixed(1)}x",
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           Slider(
-            value: _speedIndex,
-            min: 0,
-            max: (_timeSteps.length - 1).toDouble(),
-            divisions: _timeSteps.length - 1,
-            label: '$_frequencyMs ms',
+            value: _speed,
+            min: 0.5,
+            max: 10,
+            divisions: 19, // pasos de 0.5
+            label: "${_speed.toStringAsFixed(1)}x",
             onChanged: (val) => _updateFrequencyFromSpeed(val),
           ),
           Text(
@@ -506,79 +471,48 @@ class _PeripheralPageState extends State<PeripheralPage> {
             style: const TextStyle(fontSize: 16),
           ),
           const SizedBox(height: 20),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              ElevatedButton(
-                onPressed: () => setState(() => _soundType = "click-1125.mp3"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _soundType == "click-1125.mp3"
-                      ? Colors.blue
-                      : Colors.grey,
-                ),
-                child: const Text("click-1125"),
-              ),
-              ElevatedButton(
-                onPressed: () => setState(() => _soundType = "tap-2585.mp3"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _soundType == "tap-2585.mp3"
-                      ? Colors.blue
-                      : Colors.grey,
-                ),
-                child: const Text("tap-2585"),
-              ),
-              ElevatedButton(
-                onPressed: () => setState(() => _soundType = "select-3124.mp3"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _soundType == "select-3124.mp3"
-                      ? Colors.blue
-                      : Colors.grey,
-                ),
-                child: const Text("select-3124"),
-              ),
-            ],
-          ),
 
-          const SizedBox(height: 20),
-
-          // 🔹 Contenedor visual ping-pong NUEVO
+          // 🔹 Contenedor visual ping-pong
           Container(
+            width: 700,
             height: 400,
             color: Colors.grey[200],
-            child: AnimatedAlign(
-              alignment: _animationType == "horizontal"
-                  ? (_selectedSide == "right"
-                        ? Alignment.centerLeft
-                        : Alignment.centerRight)
-                  : _animationType == "vertical"
-                  ? (_selectedSide == "right"
-                        ? Alignment.topCenter
-                        : Alignment.bottomCenter)
-                  : _animationType == "diagonal-right"
-                  ? (_selectedSide == "right"
-                        ? Alignment.topLeft
-                        : Alignment.bottomRight)
-                  : (_selectedSide == "right"
-                        ? Alignment.topRight
-                        : Alignment.bottomLeft),
-              duration: Duration(milliseconds: _frequencyMs),
-              curve: Curves.linear,
-              child: Container(
-                width: 50,
-                height: 50,
-                decoration: const BoxDecoration(
-                  color: Colors.blue,
-                  shape: BoxShape.circle,
+            child: Stack(
+              children: [
+                AnimatedAlign(
+                  alignment: _animationType == "horizontal"
+                      ? (_selectedSide == "left"
+                            ? Alignment.centerLeft
+                            : Alignment.centerRight)
+                      : _animationType == "vertical"
+                      ? (_selectedSide == "left"
+                            ? Alignment.topCenter
+                            : Alignment.bottomCenter)
+                      : _animationType == "diagonal-right"
+                      ? (_selectedSide == "left"
+                            ? Alignment.topLeft
+                            : Alignment.bottomRight)
+                      : (_selectedSide == "left"
+                            ? Alignment.topRight
+                            : Alignment.bottomLeft), // diagonal-left
+                  duration: Duration(
+                    milliseconds: max((_frequencyMs ~/ 2).round(), 50),
+                  ),
+                  curve: Curves.easeOut,
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: const BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
 
           const SizedBox(height: 20),
-
-          // Botones para cambiar animación
           Wrap(
             alignment: WrapAlignment.center,
             spacing: 12,
