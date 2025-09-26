@@ -60,6 +60,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
   String? _selectedColor = "Verde";
   String? _selectedSide =
       "right"; // horizontal | vertical | diagonal-right | diagonal-left
+  String? _selectedAnimated = null;
 
   final Map<String, Color> _colors = {
     "Rojo": Colors.red,
@@ -262,6 +263,10 @@ class _PeripheralPageState extends State<PeripheralPage> {
 
     if (_isRunning) {
       // Detener
+      // Espera un frame para que primero se pinte en el centro
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() => _selectedAnimated = null);
+      });
       _cycleTimer?.cancel();
       setState(() => _isRunning = false);
     } else {
@@ -271,12 +276,20 @@ class _PeripheralPageState extends State<PeripheralPage> {
         _cycleCount = 0;
       });
 
+      // Espera un frame para que primero se pinte en el centro
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(
+          () => _selectedSide = (_selectedSide == "left") ? "right" : "left",
+        ); // o "right"
+      });
+
       _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
         timer,
       ) async {
         // 1️⃣ Cambiar lado de destino para que AnimatedAlign comience a moverse
         setState(() {
           _selectedSide = (_selectedSide == "left") ? "right" : "left";
+          _selectedAnimated = (_selectedSide == "left") ? "right" : "left";
           _cycleCount++;
         });
 
@@ -301,6 +314,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
           // 1️⃣ Cambiar lado de destino para que AnimatedAlign comience a moverse
           setState(() {
             _selectedSide = (_selectedSide == "left") ? "right" : "left";
+            _selectedAnimated = (_selectedSide == "left") ? "right" : "left";
             _cycleCount++;
           });
 
@@ -547,22 +561,26 @@ class _PeripheralPageState extends State<PeripheralPage> {
             height: 400,
             color: Colors.grey[200],
             child: AnimatedAlign(
-              alignment: _animationType == "horizontal"
-                  ? (_selectedSide == "right"
+              alignment: _selectedAnimated == null
+                  ? Alignment.center
+                  : _animationType == "horizontal"
+                  ? (_selectedAnimated == "left"
                         ? Alignment.centerLeft
                         : Alignment.centerRight)
                   : _animationType == "vertical"
-                  ? (_selectedSide == "right"
+                  ? (_selectedAnimated == "right"
                         ? Alignment.topCenter
                         : Alignment.bottomCenter)
                   : _animationType == "diagonal-right"
-                  ? (_selectedSide == "right"
+                  ? (_selectedAnimated == "left"
                         ? Alignment.topLeft
                         : Alignment.bottomRight)
-                  : (_selectedSide == "right"
+                  : (_selectedAnimated == "left"
                         ? Alignment.topRight
                         : Alignment.bottomLeft),
-              duration: Duration(milliseconds: _frequencyMs),
+              duration: Duration(
+                milliseconds: _frequencyMs,
+              ), // misma velocidad que el ciclo
               curve: Curves.linear,
               child: Container(
                 width: 50,
