@@ -110,6 +110,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
   void dispose() {
     _audioPlayer.dispose();
     _cycleTimer?.cancel();
+    _cycleTimer = null;
     super.dispose();
   }
 
@@ -183,6 +184,33 @@ class _PeripheralPageState extends State<PeripheralPage> {
     }
   }
 
+  Future<void> _playSoundToggleFrequency() async {
+    if (_cycleTimer != null) {
+      try {
+        final balance = _selectedSide == "right"
+            ? 1.0
+            : _selectedSide == "left"
+            ? -1.0
+            : 0.0;
+
+        await _audioPlayer.setBalance(balance);
+
+        final bytes = _cachedSounds[_soundType];
+        if (bytes == null) {
+          debugPrint("⚠️ Audio no precargado, reproduciendo desde assets");
+          await _audioPlayer.play(AssetSource(_soundType));
+          return;
+        }
+
+        // Reproduce desde memoria directamente
+        await _audioPlayer.play(BytesSource(bytes));
+        debugPrint("🔊 Reproduciendo $_soundType en canal: $_selectedSide");
+      } catch (e) {
+        debugPrint("❌ Error reproduciendo sonido: $e");
+      }
+    }
+  }
+
   Future<void> _sendToBLE() async {
     final int? intensity = int.tryParse(_intensityColorController.text);
     final int? vin = int.tryParse(_vinController.text);
@@ -245,6 +273,70 @@ class _PeripheralPageState extends State<PeripheralPage> {
     }
   }
 
+  Future<void> _sendToBLEToggleFrequency() async {
+    final int? intensity = int.tryParse(_intensityColorController.text);
+    final int? vin = int.tryParse(_vinController.text);
+    final int? vsp = int.tryParse(_vspController.text);
+    final int? colorIndex = _selectedColor != null
+        ? _colors.keys.toList().indexOf(_selectedColor!) + 1
+        : null;
+    final int? delayMs = int.tryParse(_delayController.text);
+
+    if (intensity == null ||
+        vin == null ||
+        vsp == null ||
+        colorIndex == null ||
+        _selectedSide == null ||
+        delayMs == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Complete all fields")));
+      return;
+    }
+
+    try {
+      // 1️⃣ Iniciar audio
+      debugPrint("🎵 Reproduciendo sonido...");
+      _playSoundToggleFrequency();
+
+      // 2️⃣ Esperar el retraso configurado
+      if (delayMs > 0) {
+        debugPrint("⏱ Esperando $delayMs ms antes de enviar BLE...");
+        await Future.delayed(Duration(milliseconds: delayMs));
+      }
+
+      // 3️⃣ Preparar y enviar datos BLE
+      final Map<String, dynamic> data = {
+        "Dr": _selectedSide,
+        "In": intensity,
+        "Col": colorIndex,
+        "Vin": vin,
+        "Vsp": vsp,
+      };
+
+      final jsonStr = json.encode(data);
+      final bytes = Uint8List.fromList(utf8.encode(jsonStr));
+
+      debugPrint("✅ Enviando datos al BLE: $jsonStr");
+
+      if (_cycleTimer != null) {
+        await _manager.writeCharacteristic(
+          widget.peripheral,
+          _writeChar!,
+          value: bytes,
+          type: GATTCharacteristicWriteType.withResponse,
+        );
+      }
+
+      debugPrint("✅ Comando BLE enviado correctamente");
+    } catch (e) {
+      debugPrint("❌ Error en el proceso: $e");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
+  }
+
   void _toggleFrequency() {
     if (int.tryParse(_intensityColorController.text) == null ||
         int.tryParse(_vinController.text) == null ||
@@ -268,19 +360,13 @@ class _PeripheralPageState extends State<PeripheralPage> {
         setState(() => _selectedAnimated = null);
       });
       _cycleTimer?.cancel();
+      _cycleTimer = null;
       setState(() => _isRunning = false);
     } else {
       // Iniciar
       setState(() {
         _isRunning = true;
         _cycleCount = 0;
-      });
-
-      // Espera un frame para que primero se pinte en el centro
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(
-          () => _selectedSide = (_selectedSide == "left") ? "right" : "left",
-        ); // o "right"
       });
 
       _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
@@ -296,7 +382,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
         // 2️⃣ Esperar exactamente el tiempo que dura la animación
         //    (el mismo _frequencyMs) antes de disparar audio+BLE
         Future.delayed(Duration(milliseconds: _frequencyMs), () async {
-          await _sendToBLE(); // 🔊 click cuando ya llegó
+          await _sendToBLEToggleFrequency(); // 🔊 click cuando ya llegó
         });
       });
     }
@@ -308,6 +394,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
       // Reinicia el timer si está corriendo
       if (_isRunning) {
         _cycleTimer?.cancel();
+        _cycleTimer = null;
         _cycleTimer = Timer.periodic(Duration(milliseconds: _frequencyMs), (
           timer,
         ) async {
@@ -321,7 +408,7 @@ class _PeripheralPageState extends State<PeripheralPage> {
           // 2️⃣ Esperar exactamente el tiempo que dura la animación
           //    (el mismo _frequencyMs) antes de disparar audio+BLE
           Future.delayed(Duration(milliseconds: _frequencyMs), () async {
-            await _sendToBLE(); // 🔊 click cuando ya llegó
+            await _sendToBLEToggleFrequency(); // 🔊 click cuando ya llegó
           });
         });
       }
